@@ -1,6 +1,6 @@
 # Lumenverba 绘图
 
-可安装的 Codex 技能，使用 Lumenverba 图像 API 生成图片。技能包内置仅依赖 Python 标准库的客户端，不依赖 MCP 常驻服务、本机固定路径或额外 Python 包。
+可安装的技能，使用 Lumenverba 图像 API 生成图片。技能包内置仅依赖 Python 标准库的客户端，不依赖 MCP 常驻服务、本机固定路径或额外 Python 包。
 
 ## 安装
 
