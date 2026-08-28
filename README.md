@@ -1,14 +1,14 @@
 # Lumenverba 绘图
 
-可安装的技能，使用 Lumenverba 图像 API 生成图片。技能包内置仅依赖 Python 标准库的客户端，不依赖 MCP 常驻服务、本机固定路径或额外 Python 包。
+可安装 Agent 的技能，使用 Lumenverba 图像 API 生成图片。技能包内置仅依赖 Python 标准库的客户端，不依赖 MCP 常驻服务、本机固定路径或额外 Python 包。
 
 ## 安装
 
-需要 Codex 和 Python 3.11 或更高版本：
+需要Python 3.11 或更高版本：
 
-### 在 Codex 对话中安装
+### 在对话中安装
 
-新建一个 Codex 对话，发送以下内容：
+新建一个对话，发送以下内容：
 
 ```text
 请从 https://github.com/yixixi-yahaha/lumenverba-image/tree/v1.2.5/skills/lumenverba-image 安装 lumenverba-image 技能（当前最新稳定版 v1.2.5）。
@@ -20,7 +20,7 @@
 npx.cmd skills add "https://github.com/yixixi-yahaha/lumenverba-image/tree/v1.2.5/skills/lumenverba-image" -g -y
 ```
 
-当前最新稳定版为 `v1.2.5`。安装命令固定到发布标签；更新时请改用新的发布标签 URL，而不要继续使用旧版本链接。安装完成后，重新打开 Codex。技能会在文生图、参考图生图、海报、角色图、插画或包含指定清晰文字的图片请求中自动启用。
+当前最新稳定版为 `v1.2.5`。安装命令固定到发布标签；更新时请改用新的发布标签 URL，而不要继续使用旧版本链接。安装完成后，重新打开 Agent。技能会在文生图、参考图生图、海报、角色图、插画或包含指定清晰文字的图片请求中自动启用。
 
 ## 首次配置密钥
 
@@ -32,14 +32,14 @@ $secureKey = Read-Host "请输入 Lumenverba API 密钥" -AsSecureString
 $plainKey = [System.Net.NetworkCredential]::new("", $secureKey).Password
 [Environment]::SetEnvironmentVariable("LUMENVERBA_API_KEY", $plainKey, "User")
 Remove-Variable plainKey
-Write-Host "配置完成。请完全退出并重新打开 Codex，然后重新发送生图请求。"
+Write-Host "配置完成。请完全退出并重新打开 Agent，然后重新发送生图请求。"
 ```
 
 技能固定使用 `https://api.lumenverba.cc/v1`，无需配置 API 地址。
 
 ## 干净卸载
 
-仅删除技能目录不会清除首次配置时写入的用户环境变量。若不再使用本技能，可在 Codex 对话中发送：
+仅删除技能目录不会清除首次配置时写入的用户环境变量。若不再使用本技能，可在对话中发送：
 
 ```text
 请卸载 lumenverba-image（Lumenverba 绘图）技能，并删除用户环境变量 LUMENVERBA_API_KEY。不要显示密钥，也不要删除生成的图片或修改其他环境变量。完成后只报告技能目录和密钥是否仍存在，并提醒我完全退出并重新打开 Codex。
@@ -56,7 +56,7 @@ Write-Host "用户环境变量仍存在: $keyStillExists"
 Remove-Variable keyStillExists
 ```
 
-命令应显示 `用户环境变量仍存在: False`。已经运行的 Codex 进程仍可能保留启动时继承的旧值，因此清理后必须完全退出 Codex、结束后台进程并重新打开。干净卸载不会删除此前生成的图片，也不会修改其他环境变量。
+命令应显示 `用户环境变量仍存在: False`。已经运行的进程仍可能保留启动时继承的旧值，因此清理后必须完全退出 Agent、结束后台进程并重新打开。干净卸载不会删除此前生成的图片，也不会修改其他环境变量。
 
 ## 功能
 
@@ -70,7 +70,7 @@ Remove-Variable keyStillExists
 
 同一提示词可使用 `--count 2` 至 `--count 10` 在一次请求中生成多个版本，单次最多 10 张。多个不同提示词使用 `batch --prompt`，每批重复传入 2 至 4 个 `--prompt`，并发生成上限为 4 张；脚本会并发执行并按输入顺序输出成功图片路径。
 
-### 在 Codex 中使用
+### 在 Agent 中使用
 
 同一提示词一次生成多张图片：
 
