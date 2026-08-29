@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "skills" / "lumenverba-image"
-SCRIPT_PATH = SKILL_ROOT / "scripts" / "lumenverba_image.py"
+SKILL_ROOT = ROOT / "skills" / "cell-lct-image"
+SCRIPT_PATH = SKILL_ROOT / "scripts" / "cell_lct_image.py"
 PNG_BYTES = b"\x89PNG\r\n\x1a\nexample"
 
 
 def load_client():
-    spec = importlib.util.spec_from_file_location("copy_lumenverba_client", SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location("copy_cell_lct_client", SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError("无法加载副本客户端脚本")
     module = importlib.util.module_from_spec(spec)
@@ -97,7 +97,7 @@ class RetryRegressionTests(unittest.TestCase):
 
         with patch.object(client, "_open_url", side_effect=failures) as urlopen:
             with redirect_stderr(StringIO()):
-                client._send("GET", "https://api.lumenverba.cc/v1/tasks/task-1", {"X-Test": "value"})
+                client._send("GET", "https://relay.example/v1/tasks/task-1", {"X-Test": "value"})
 
         first_call, second_call = urlopen.call_args_list
         first_request = first_call.args[0]
@@ -119,7 +119,7 @@ class RetryRegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             result_file = (Path(directory) / "result.json").resolve()
-            with patch.dict(os.environ, {"LUMENVERBA_API_KEY": "test-key"}, clear=True):
+            with patch.dict(os.environ, {"CELL_LCT_IMAGE_API_KEY": "test-key", "CELL_LCT_IMAGE_BASE_URL": "https://relay.example/v1"}, clear=True):
                 with patch.object(client, "_open_url", side_effect=[accepted, first_error, completed]):
                     with redirect_stdout(stdout), redirect_stderr(stderr):
                         exit_code = client.main([

@@ -1,4 +1,4 @@
-"""Portable command-line client for the Lumenverba image API."""
+"""Portable command-line client for an OpenAI-compatible Image 2 relay."""
 
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from pathlib import Path
 from queue import Empty, SimpleQueue
 
 
-DEFAULT_BASE_URL = "https://api.lumenverba.cc/v1"
 DEFAULT_MODEL = "gpt-image-2"
 DEFAULT_SIZE = "1536x1024"
 DEFAULT_QUALITY = "standard"
@@ -60,16 +59,22 @@ def _open_url(request: urllib.request.Request, timeout: int):
 
 
 class Settings:
-    def __init__(self, api_key: str):
-        self.base_url = DEFAULT_BASE_URL
+    def __init__(self, api_key: str, base_url: str):
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
     @classmethod
     def from_environment(cls) -> "Settings":
-        api_key = os.environ.get("LUMENVERBA_API_KEY", "").strip()
+        api_key = os.environ.get("CELL_LCT_IMAGE_API_KEY", "").strip()
         if not api_key:
-            raise RuntimeError("未设置 LUMENVERBA_API_KEY 环境变量。")
-        return cls(api_key)
+            raise RuntimeError("未设置 CELL_LCT_IMAGE_API_KEY 环境变量。")
+        base_url = os.environ.get("CELL_LCT_IMAGE_BASE_URL", "").strip()
+        if not base_url:
+            raise RuntimeError("未设置 CELL_LCT_IMAGE_BASE_URL 环境变量。")
+        parsed = urllib.parse.urlsplit(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+            raise RuntimeError("CELL_LCT_IMAGE_BASE_URL 必须是有效的 HTTP(S) 地址。")
+        return cls(api_key, base_url)
 
 
 @dataclass(frozen=True)
@@ -133,7 +138,7 @@ def build_text_prompt(
 def _headers(settings: Settings) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.api_key}",
-        "User-Agent": "LumenverbaCodexSkill/1.0",
+        "User-Agent": "CellLctImageSkill/1.0",
     }
 
 
@@ -282,7 +287,7 @@ def _save_png(image_bytes: bytes, output_dir: Path) -> Path:
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise RuntimeError("生成图像文件过大。")
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / f"lumenverba-{secrets.token_hex(12)}.png"
+    path = output_dir / f"cell-lct-image-{secrets.token_hex(12)}.png"
     path.write_bytes(image_bytes)
     return path.resolve()
 
@@ -298,8 +303,8 @@ def _save_response_item(image: dict[str, object], output_dir: Path, settings: Se
     if not isinstance(url, str) or settings is None:
         raise RuntimeError("图像服务响应中没有可保存的图像。")
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise RuntimeError("生成图像 URL 必须使用 HTTPS。")
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise RuntimeError("生成图像 URL 必须使用 HTTP(S)。")
     status, headers, image_bytes = _send("GET", url, {})
     if not 200 <= status < 300 or not headers.get("Content-Type", "").lower().startswith("image/png"):
         raise RuntimeError("下载生成图像失败。")
@@ -331,18 +336,19 @@ def _task_location(headers: dict[str, str], settings: Settings) -> str:
     try:
         parsed = urllib.parse.urlsplit(task_url)
         base = urllib.parse.urlsplit(settings.base_url)
-        task_port = parsed.port if parsed.port is not None else 443
-        base_port = base.port if base.port is not None else 443
     except ValueError as error:
         raise RuntimeError("图像服务返回了不安全的任务地址。") from error
 
     decoded_path = urllib.parse.unquote(parsed.path)
     namespace = f"{urllib.parse.unquote(base.path).rstrip('/')}/"
+    base_scheme = base.scheme
+    default_port = 443 if base_scheme == "https" else 80
+    task_port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+    base_port = base.port if base.port is not None else default_port
     if (
-        parsed.scheme != "https"
+        parsed.scheme != base_scheme
         or parsed.hostname != base.hostname
-        or task_port != 443
-        or base_port != 443
+        or task_port != base_port
         or parsed.username is not None
         or parsed.password is not None
         or bool(parsed.fragment)
@@ -407,7 +413,7 @@ def build_edit_request(
     payload.pop("partial_images")
     if not references:
         raise ValueError("至少需要提供一张参考图。")
-    boundary = f"----Lumenverba{secrets.token_hex(16)}"
+    boundary = f"----CellLctImage{secrets.token_hex(16)}"
     chunks: list[bytes] = []
     for name, value in payload.items():
         chunks.extend([f"--{boundary}\r\n".encode(), f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(), str(value).encode("utf-8"), b"\r\n"])
@@ -474,7 +480,7 @@ def generate_batch(
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Lumenverba 绘图客户端")
+    parser = argparse.ArgumentParser(description="Cell-lct Image 2 绘图客户端")
     subcommands = parser.add_subparsers(dest="command", required=True)
     for command in ("generate", "edit", "text"):
         current = subcommands.add_parser(command)

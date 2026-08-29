@@ -17,8 +17,8 @@ from unittest.mock import MagicMock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_ROOT = ROOT / "skills" / "lumenverba-image"
-SCRIPT_PATH = SKILL_ROOT / "scripts" / "lumenverba_image.py"
+SKILL_ROOT = ROOT / "skills" / "cell-lct-image"
+SCRIPT_PATH = SKILL_ROOT / "scripts" / "cell_lct_image.py"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 PUBLIC_FILES = (ROOT / "README.md", SKILL_ROOT / "SKILL.md", SCRIPT_PATH)
 EXPECTED_STABLE_VERSION = "v1.2.5"
@@ -26,7 +26,7 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\nexample"
 
 
 def load_public_client():
-    spec = importlib.util.spec_from_file_location("public_lumenverba_client", SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location("public_cell_lct_client", SCRIPT_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError("无法加载公开客户端脚本")
     module = importlib.util.module_from_spec(spec)
@@ -42,7 +42,7 @@ class PublicSkillPrivacyTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             for forbidden in forbidden_paths:
                 self.assertNotIn(forbidden, content, f"公开文件泄露了本机路径: {path}")
-            self.assertNotIn("LUMENVERBA_API_KEY=", content, f"公开文件包含密钥赋值: {path}")
+            self.assertNotIn("CELL_LCT_IMAGE_API_KEY=", content, f"公开文件包含密钥赋值: {path}")
 
     def test_tracked_public_text_has_no_machine_specific_paths(self):
         result = subprocess.run(
@@ -61,6 +61,8 @@ class PublicSkillPrivacyTests(unittest.TestCase):
                 continue
             relative = Path(raw_path)
             if relative.parts[0] == "tests":
+                continue
+            if not (ROOT / relative).exists():
                 continue
             if relative.suffix.lower() not in {".md", ".py", ".yml", ".yaml"} and relative.name != "LICENSE":
                 continue
@@ -85,18 +87,25 @@ class PortableClientTests(unittest.TestCase):
         self.assertEqual(arguments.text, "“夏日$特惠” O'Reilly `test`")
         self.assertEqual(arguments.description, '海报包含 "ASCII quotes" 与 $price')
 
-    def test_settings_uses_the_api_subdomain_by_default(self):
+    def test_settings_uses_the_configured_relay(self):
         client = load_public_client()
 
-        with patch.dict(os.environ, {"LUMENVERBA_API_KEY": "test-key"}, clear=True):
-            self.assertEqual(client.Settings.from_environment().base_url, "https://api.lumenverba.cc/v1")
+        with patch.dict(os.environ, {"CELL_LCT_IMAGE_API_KEY": "test-key", "CELL_LCT_IMAGE_BASE_URL": "https://relay.example/v1"}, clear=True):
+            self.assertEqual(client.Settings.from_environment().base_url, "https://relay.example/v1")
+
+    def test_settings_requires_a_configured_relay(self):
+        client = load_public_client()
+
+        with patch.dict(os.environ, {"CELL_LCT_IMAGE_API_KEY": "test-key"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "未设置 CELL_LCT_IMAGE_BASE_URL"):
+                client.Settings.from_environment()
 
     def test_creation_network_error_is_not_retried(self):
         client = load_public_client()
 
         with patch.object(client, "_open_url", side_effect=client.urllib.error.URLError("TLS EOF")) as urlopen:
             with self.assertRaisesRegex(RuntimeError, "TLS 连接失败.*生成状态未知.*未自动重试"):
-                client._send("POST", "https://api.lumenverba.cc/v1/images/generations", {})
+                client._send("POST", "https://relay.example/v1/images/generations", {})
 
         self.assertEqual(urlopen.call_count, 1)
 
@@ -114,7 +123,7 @@ class PortableClientTests(unittest.TestCase):
             with redirect_stderr(stderr):
                 status, _, body = client._send(
                     "GET",
-                    "https://api.lumenverba.cc/v1/tasks/task-1",
+                    "https://relay.example/v1/tasks/task-1",
                     {},
                 )
 
@@ -144,7 +153,7 @@ class PortableClientTests(unittest.TestCase):
             with redirect_stderr(StringIO()):
                 status, _, body = client._send(
                     "GET",
-                    "https://api.lumenverba.cc/v1/tasks/task-1",
+                    "https://relay.example/v1/tasks/task-1",
                     {},
                 )
 
@@ -164,7 +173,7 @@ class PortableClientTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "生成状态未知.*创建请求未自动重试"):
                 client._send(
                     "POST",
-                    "https://api.lumenverba.cc/v1/images/generations",
+                    "https://relay.example/v1/images/generations",
                     {},
                 )
 
@@ -179,7 +188,7 @@ class PortableClientTests(unittest.TestCase):
             side_effect=client.urllib.error.URLError(TimeoutError("private timeout")),
         ) as urlopen:
             with self.assertRaisesRegex(RuntimeError, "网络连接超时.*未自动重试"):
-                client._send("GET", "https://api.lumenverba.cc/v1/tasks/task-1", {})
+                client._send("GET", "https://relay.example/v1/tasks/task-1", {})
 
         self.assertEqual(urlopen.call_count, 1)
 
@@ -274,7 +283,7 @@ class PortableClientTests(unittest.TestCase):
         client = load_public_client()
 
         with patch.dict(os.environ, {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "未设置 LUMENVERBA_API_KEY"):
+            with self.assertRaisesRegex(RuntimeError, "未设置 CELL_LCT_IMAGE_API_KEY"):
                 client.Settings.from_environment()
 
     def test_text_prompt_requires_verbatim_readable_text(self):
@@ -426,7 +435,7 @@ class PortableClientTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(client, "_send", return_value=(200, {"Content-Type": "image/png"}, PNG_BYTES)) as send:
-                result = client.save_response_image(response, "application/json", Path(directory), client.Settings("test-key"))
+                result = client.save_response_image(response, "application/json", Path(directory), client.Settings("test-key", "https://relay.example/v1"))
 
             self.assertEqual(result.read_bytes(), PNG_BYTES)
             self.assertEqual(send.call_args.args[:2], ("GET", "https://example.test/image.png"))
@@ -449,13 +458,13 @@ class PortableClientTests(unittest.TestCase):
                         "/images/generations",
                         b"{}",
                         "application/json",
-                        client.Settings("test-key"),
+                        client.Settings("test-key", "https://relay.example/v1"),
                         Path(directory),
                     )
 
             self.assertEqual(result.read_bytes(), PNG_BYTES)
 
-        self.assertEqual(send.call_args_list[1].args[:2], ("GET", "https://api.lumenverba.cc/v1/tasks/task-1"))
+        self.assertEqual(send.call_args_list[1].args[:2], ("GET", "https://relay.example/v1/tasks/task-1"))
         self.assertEqual(send.call_count, 3)
         sleep.assert_called_once_with(1)
 
@@ -468,7 +477,7 @@ class PortableClientTests(unittest.TestCase):
                         "/images/generations",
                         b"{}",
                         "application/json",
-                        client.Settings("test-key"),
+                        client.Settings("test-key", "https://relay.example/v1"),
                         Path(directory),
                     )
 
@@ -478,20 +487,20 @@ class PortableClientTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "不安全的任务地址"):
             client._task_location(
                 {"Location": "https://attacker.example/v1/tasks/task-1"},
-                client.Settings("test-key"),
+                client.Settings("test-key", "https://relay.example/v1"),
             )
 
     def test_task_location_rejects_untrusted_url_shapes(self):
         client = load_public_client()
         invalid_locations = (
-            "//api.lumenverba.cc/v1/tasks/task-1",
-            "https://api.lumenverba.cc:444/v1/tasks/task-1",
-            "https://api.lumenverba.cc:0/v1/tasks/task-1",
-            "https://user@api.lumenverba.cc/v1/tasks/task-1",
-            "https://api.lumenverba.cc/v1/tasks/task-1#fragment",
-            "https://api.lumenverba.cc/private/task-1",
-            "https://api.lumenverba.cc/v1/%2e%2e/private/task-1",
-            "https://api.lumenverba.cc/v1/%2F..%2Fprivate/task-1",
+            "//relay.example/v1/tasks/task-1",
+            "https://relay.example:444/v1/tasks/task-1",
+            "https://relay.example:0/v1/tasks/task-1",
+            "https://user@relay.example/v1/tasks/task-1",
+            "https://relay.example/v1/tasks/task-1#fragment",
+            "https://relay.example/private/task-1",
+            "https://relay.example/v1/%2e%2e/private/task-1",
+            "https://relay.example/v1/%2F..%2Fprivate/task-1",
         )
 
         for location in invalid_locations:
@@ -499,7 +508,7 @@ class PortableClientTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "不安全的任务地址"):
                     client._task_location(
                         {"Location": location},
-                        client.Settings("test-key"),
+                        client.Settings("test-key", "https://relay.example/v1"),
                     )
 
     def test_rejects_non_https_generated_image_url(self):
@@ -507,8 +516,8 @@ class PortableClientTests(unittest.TestCase):
         response = json.dumps({"data": [{"url": "file:///private.png"}]}).encode("utf-8")
 
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(RuntimeError, "必须使用 HTTPS"):
-                client.save_response_image(response, "application/json", Path(directory), client.Settings("test-key"))
+            with self.assertRaisesRegex(RuntimeError, r"必须使用 HTTP\(S\)"):
+                client.save_response_image(response, "application/json", Path(directory), client.Settings("test-key", "https://relay.example/v1"))
 
     def test_rejects_relative_and_oversized_reference_images(self):
         client = load_public_client()
@@ -528,13 +537,12 @@ class PackagedSkillTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
 
-        for content in (readme, skill):
-            self.assertIn("https://api.lumenverba.cc/v1", content)
+        self.assertIn("CELL_LCT_IMAGE_BASE_URL", readme + skill)
 
         for expected in (
             "--output-dir",
             "load_workspace_dependencies",
-            "/tree/v1.2.5/skills/lumenverba-image",
+            "/tree/v1.2.5/skills/cell-lct-image",
             "当前最新稳定版 v1.2.5",
         ):
             self.assertIn(expected, readme + skill)
@@ -576,11 +584,11 @@ class PackagedSkillTests(unittest.TestCase):
             "python -m unittest discover -s tests -v",
             "python -m unittest discover -v",
             "python -m compileall -q skills tests",
-            "lumenverba_image.py --help",
-            "lumenverba_image.py generate --help",
-            "lumenverba_image.py edit --help",
-            "lumenverba_image.py text --help",
-            "lumenverba_image.py batch --help",
+            "cell_lct_image.py --help",
+            "cell_lct_image.py generate --help",
+            "cell_lct_image.py edit --help",
+            "cell_lct_image.py text --help",
+            "cell_lct_image.py batch --help",
             "git diff --check HEAD^ HEAD",
         ):
             with self.subTest(expected=expected):
@@ -593,9 +601,11 @@ class PackagedSkillTests(unittest.TestCase):
 
         for expected in (
             "## 干净卸载",
-            "请卸载 lumenverba-image（Lumenverba 绘图）技能",
-            '[Environment]::SetEnvironmentVariable("LUMENVERBA_API_KEY", $null, "User")',
-            "Remove-Item Env:LUMENVERBA_API_KEY",
+            "请卸载 cell-lct-image（Cell-lct Image 2 绘图）技能",
+            '[Environment]::SetEnvironmentVariable("CELL_LCT_IMAGE_API_KEY", $null, "User")',
+            '[Environment]::SetEnvironmentVariable("CELL_LCT_IMAGE_BASE_URL", $null, "User")',
+            "Remove-Item Env:CELL_LCT_IMAGE_API_KEY",
+            "Remove-Item Env:CELL_LCT_IMAGE_BASE_URL",
             "不要显示密钥",
             "不要删除生成的图片或修改其他环境变量",
             "完全退出并重新打开 Codex",
