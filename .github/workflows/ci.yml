@@ -33,9 +33,9 @@ jobs:
           python -m unittest discover -s tests -v
           python -m unittest discover -v
           python -m compileall -q skills tests
-          python skills/lumenverba-image/scripts/lumenverba_image.py --help
-          python skills/lumenverba-image/scripts/lumenverba_image.py generate --help
-          python skills/lumenverba-image/scripts/lumenverba_image.py edit --help
-          python skills/lumenverba-image/scripts/lumenverba_image.py text --help
-          python skills/lumenverba-image/scripts/lumenverba_image.py batch --help
+          python skills/cell-lct-image/scripts/cell_lct_image.py --help
+          python skills/cell-lct-image/scripts/cell_lct_image.py generate --help
+          python skills/cell-lct-image/scripts/cell_lct_image.py edit --help
+          python skills/cell-lct-image/scripts/cell_lct_image.py text --help
+          python skills/cell-lct-image/scripts/cell_lct_image.py batch --help
           git diff --check HEAD^ HEAD

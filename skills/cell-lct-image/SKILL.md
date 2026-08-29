@@ -1,17 +1,19 @@
 ---
-name: lumenverba-image
-description: Use when the user asks to generate images with Lumenverba, including text-to-image, reference-image generation, Chinese posters, characters, illustrations, or images containing specified readable text.
+name: cell-lct-image
+description: Use Image 2 through a user-configured OpenAI-compatible relay to generate scientific raster references for cell-lct, including text-to-image and reference-image editing.
 ---
 
-# Lumenverba 绘图
+# Cell-lct Image
 
-当前技能版本：`v1.2.5`。
+当前最新稳定版为 `v1.2.5`。
 
-使用本技能同级 `scripts/lumenverba_image.py` 直接调用 Lumenverba 图像 API。执行前先从当前 `SKILL.md` 的实际位置推导技能目录；不得使用固定的本机绝对路径，也不调用旧 MCP 服务。
+使用本技能同级 `scripts/cell_lct_image.py` 调用 OpenAI-compatible Image API，为 `$cell-lct` 生成 PNG 参考图。本技能负责 Image 2 生图，不负责 SVG 矢量化或 Illustrator 播放。
+
+中转站地址和密钥分别来自 `CELL_LCT_IMAGE_BASE_URL` 与 `CELL_LCT_IMAGE_API_KEY`；不得在代码、Skill、命令行或聊天中写入实际值。
 
 ## 专用边界
 
-- 仅在用户明确要求使用 Lumenverba 时调用本技能；通用绘图请求使用原生 Image-Gen。
+- 用于为 cell-lct 工作流生成或编辑科研参考图；需要最终可编辑矢量时，把成功 PNG 交给 `$cell-lct`。
 - 透明背景、抠图或 Alpha 通道验证需求使用原生 Image-Gen，不为本技能增加后处理流程。
 
 ## 调用规则
@@ -23,10 +25,10 @@ description: Use when the user asks to generate images with Lumenverba, includin
 - 文生图使用 `generate --prompt`。
 - 参考图生图使用 `edit --prompt --reference <绝对图片路径>`；可重复传入多个 `--reference`。
 - 指定文字生图使用 `text --text --description`，并把文字语言、位置和样式传给 `--language`、`--position`、`--style`。
-- 直接执行同级 `scripts/lumenverba_image.py`；不得使用 `python -c`、内联 Python 或动态拼接 Python 源码。
+- 直接执行同级 `scripts/cell_lct_image.py`；不得使用 `python -c`、内联 Python 或动态拼接 Python 源码。
 - 在 PowerShell 中，把提示词、指定文字和描述等动态文本参数放在单引号内；参数内容中的单引号写成两个单引号。例如 `--text 'O''Reilly 夏日$特惠'`。`$`、反引号和双引号在这种写法中会按原文传入。
 - 文字生图固定使用 `text` 子命令，不要手动为指定文字添加引号；脚本会在 `build_text_prompt()` 中构造逐字准确约束。
-- 执行时以技能目录中的 `scripts/lumenverba_image.py` 为脚本路径。脚本成功时 stdout 只返回生成 PNG 的绝对路径；失败诊断和重试提示写入 stderr。创建请求不会自动重试，网络失败时生成状态未知。读取请求仅在首次出现 `DNS 解析失败`、`TLS 连接失败`、`连接被拒绝`或`代理连接失败`时最多自动重试 1 次；`网络连接超时`、连接中途关闭和通用网络失败不自动重试。
+- 执行时以技能目录中的 `scripts/cell_lct_image.py` 为脚本路径。脚本成功时 stdout 只返回生成 PNG 的绝对路径；失败诊断和重试提示写入 stderr。创建请求不会自动重试，网络失败时生成状态未知。读取请求仅在首次出现 `DNS 解析失败`、`TLS 连接失败`、`连接被拒绝`或`代理连接失败`时最多自动重试 1 次；`网络连接超时`、连接中途关闭和通用网络失败不自动重试。
 
 ## 快速执行
 
@@ -65,15 +67,17 @@ description: Use when the user asks to generate images with Lumenverba, includin
 
 ## 缺少密钥
 
-若脚本返回“未设置 LUMENVERBA_API_KEY 环境变量”，不要让用户在聊天中粘贴密钥，也不要显示或记录密钥。只回复以下 PowerShell 代码块，并提示用户完全退出并重新打开 Codex 后重试：
+若脚本报告配置缺失，不要让用户在聊天中粘贴密钥，也不要显示或记录密钥。使用以下 PowerShell 配置，并提示用户完全退出并重新打开 Codex 后重试：
 
 ```powershell
 $OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$secureKey = Read-Host "请输入 Lumenverba API 密钥" -AsSecureString
+$baseUrl = Read-Host "请输入 Image 2 中转站地址"
+[Environment]::SetEnvironmentVariable("CELL_LCT_IMAGE_BASE_URL", $baseUrl, "User")
+$secureKey = Read-Host "请输入 Image 2 API 密钥" -AsSecureString
 $plainKey = [System.Net.NetworkCredential]::new("", $secureKey).Password
-[Environment]::SetEnvironmentVariable("LUMENVERBA_API_KEY", $plainKey, "User")
-Remove-Variable plainKey
+[Environment]::SetEnvironmentVariable("CELL_LCT_IMAGE_API_KEY", $plainKey, "User")
+Remove-Variable plainKey, baseUrl
 Write-Host "配置完成。请完全退出并重新打开 Codex，然后重新发送生图请求。"
 ```
 
-API 地址固定为 `https://api.lumenverba.cc/v1`，不要求用户配置 URL。
+中转站应提供 `/images/generations` 和 `/images/edits`。若接口实际路径包含 `/v1`，将 `/v1` 包含在 `CELL_LCT_IMAGE_BASE_URL` 中。
